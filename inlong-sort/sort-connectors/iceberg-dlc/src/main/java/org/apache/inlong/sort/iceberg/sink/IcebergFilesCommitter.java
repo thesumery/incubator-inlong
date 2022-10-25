@@ -1,23 +1,22 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ *  Licensed to the Apache Software Foundation (ASF) under one or more
+ *  contributor license agreements. See the NOTICE file distributed with
+ *  this work for additional information regarding copyright ownership.
+ *  The ASF licenses this file to You under the Apache License, Version 2.0
+ *  (the "License"); you may not use this file except in compliance with
+ *  the License. You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *  http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ *  Unless required by applicable law or agreed to in writing, software
+ *  distributed under the License is distributed on an "AS IS" BASIS,
+ *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ *  See the License for the specific language governing permissions and
+ *  limitations under the License.
+ *
  */
 
-package org.apache.inlong.sort.iceberg.flink.sink;
+package org.apache.inlong.sort.iceberg.sink;
 
 import org.apache.flink.api.common.state.ListState;
 import org.apache.flink.api.common.state.ListStateDescriptor;
@@ -48,10 +47,10 @@ import org.apache.iceberg.relocated.com.google.common.collect.Maps;
 import org.apache.iceberg.types.Comparators;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.PropertyUtil;
-import org.apache.inlong.sort.iceberg.flink.CompactTableProperties;
-import org.apache.inlong.sort.iceberg.flink.actions.RewriteResult;
-import org.apache.inlong.sort.iceberg.flink.actions.SyncRewriteDataFilesAction;
-import org.apache.inlong.sort.iceberg.flink.actions.SyncRewriteDataFilesActionOption;
+import org.apache.inlong.sort.iceberg.CompactTableProperties;
+import org.apache.inlong.sort.iceberg.actions.RewriteResult;
+import org.apache.inlong.sort.iceberg.actions.SyncRewriteDataFilesAction;
+import org.apache.inlong.sort.iceberg.actions.SyncRewriteDataFilesActionOption;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -63,9 +62,6 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Optional;
 import java.util.SortedMap;
-
-import static org.apache.inlong.sort.iceberg.flink.CompactTableProperties.COMPACT_ENABLED;
-import static org.apache.inlong.sort.iceberg.flink.CompactTableProperties.COMPACT_ENABLED_DEFAULT;
 
 /**
  * Copy from iceberg-flink:iceberg-flink-1.13:0.13.2
@@ -145,7 +141,7 @@ class IcebergFilesCommitter extends AbstractStreamOperator<Void>
         this.table = tableLoader.loadTable();
 
         // compact file
-        if (PropertyUtil.propertyAsBoolean(table.properties(), COMPACT_ENABLED, COMPACT_ENABLED_DEFAULT)) {
+        if (PropertyUtil.propertyAsBoolean(table.properties(), CompactTableProperties.COMPACT_ENABLED, CompactTableProperties.COMPACT_ENABLED_DEFAULT)) {
             compactAction = new SyncRewriteDataFilesAction(compactOption);
             CompactTableProperties.TABLE_AUTO_COMPACT_PROPERTIES.stream()
                     .forEach(k -> Optional.ofNullable(table.properties().get(k))
