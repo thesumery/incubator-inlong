@@ -141,7 +141,8 @@ class IcebergFilesCommitter extends AbstractStreamOperator<Void>
         this.table = tableLoader.loadTable();
 
         // compact file
-        if (PropertyUtil.propertyAsBoolean(table.properties(), CompactTableProperties.COMPACT_ENABLED, CompactTableProperties.COMPACT_ENABLED_DEFAULT)) {
+        if (PropertyUtil.propertyAsBoolean(table.properties(),
+                CompactTableProperties.COMPACT_ENABLED, CompactTableProperties.COMPACT_ENABLED_DEFAULT)) {
             compactAction = new SyncRewriteDataFilesAction(compactOption);
             CompactTableProperties.TABLE_AUTO_COMPACT_PROPERTIES.stream()
                     .forEach(k -> Optional.ofNullable(table.properties().get(k))
@@ -155,8 +156,7 @@ class IcebergFilesCommitter extends AbstractStreamOperator<Void>
 
         int subTaskId = getRuntimeContext().getIndexOfThisSubtask();
         int attemptId = getRuntimeContext().getAttemptNumber();
-        String operatorUniqueId = getRuntimeContext().getOperatorUniqueID();
-        this.manifestOutputFileFactory = FlinkManifestUtil.createOutputFileFactory(table, flinkJobId, operatorUniqueId,
+        this.manifestOutputFileFactory = FlinkManifestUtil.createOutputFileFactory(table, flinkJobId,
                 subTaskId, attemptId);
         this.maxCommittedCheckpointId = INITIAL_CHECKPOINT_ID;
 
