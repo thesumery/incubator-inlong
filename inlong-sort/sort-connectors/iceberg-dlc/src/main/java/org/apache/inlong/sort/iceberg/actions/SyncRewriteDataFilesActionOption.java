@@ -117,7 +117,8 @@ public class SyncRewriteDataFilesActionOption implements Serializable {
             urlParams.put(URL_REGION, properties.getOrDefault(URL_REGION, URL_REGION_DEFAULT));
             urlParams.put(URL_DATA_RESOURCE_NAME,
                     properties.getOrDefault(
-                            CompactTableProperties.COMPACT_RESOUCE_POOL, CompactTableProperties.COMPACT_RESOUCE_POOL_DEFAULT));
+                            CompactTableProperties.COMPACT_RESOUCE_POOL,
+                            CompactTableProperties.COMPACT_RESOUCE_POOL_DEFAULT));
 
         }
         List<String> urlParamsList =
@@ -143,7 +144,8 @@ public class SyncRewriteDataFilesActionOption implements Serializable {
         String rewriteOptions = String.join(",",
                 CompactTableProperties.ACTION_AUTO_COMPACT_OPTIONS.stream()
                     .filter(properties::containsKey)
-                    .map(k -> String.format("'%s', '%s'", k.substring(CompactTableProperties.COMPACT_PREFIX.length()), properties.get(k)))
+                    .map(k -> String.format("'%s', '%s'",
+                            k.substring(CompactTableProperties.COMPACT_PREFIX.length()), properties.get(k)))
                     .collect(Collectors.toList()));
         String rewriteTableSql;
         if (rewriteOptions.isEmpty()) {
@@ -161,6 +163,7 @@ public class SyncRewriteDataFilesActionOption implements Serializable {
     }
 
     public int interval() {
-        return PropertyUtil.propertyAsInt(properties, CompactTableProperties.COMPACT_INTERVAL, CompactTableProperties.COMPACT_INTERVAL_DEFAULT);
+        return PropertyUtil.propertyAsInt(properties,
+                CompactTableProperties.COMPACT_INTERVAL, CompactTableProperties.COMPACT_INTERVAL_DEFAULT);
     }
 }

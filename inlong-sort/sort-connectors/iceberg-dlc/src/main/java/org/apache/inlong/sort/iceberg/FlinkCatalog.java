@@ -1,19 +1,20 @@
 /*
- *  Licensed to the Apache Software Foundation (ASF) under one or more
- *  contributor license agreements. See the NOTICE file distributed with
- *  this work for additional information regarding copyright ownership.
- *  The ASF licenses this file to You under the Apache License, Version 2.0
- *  (the "License"); you may not use this file except in compliance with
- *  the License. You may obtain a copy of the License at
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
  *
- *  http://www.apache.org/licenses/LICENSE-2.0
+ *   http://www.apache.org/licenses/LICENSE-2.0
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS,
- *  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
- *
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+ * KIND, either express or implied.  See the License for the
+ * specific language governing permissions and limitations
+ * under the License.
  */
 
 package org.apache.inlong.sort.iceberg;
@@ -85,7 +86,7 @@ import java.util.stream.Collectors;
  * The mapping between Flink database and Iceberg namespace:
  * Supplying a base namespace for a given catalog, so if you have a catalog that supports a 2-level namespace, you
  * would supply the first level in the catalog configuration and the second level would be exposed as Flink databases.
- * <p>
+ * </p>
  * The Iceberg table manages its partitions by itself. The partition of the Iceberg table is independent of the
  * partition of Flink.
  *
@@ -113,9 +114,98 @@ public class FlinkCatalog extends AbstractCatalog {
 
         Catalog originalCatalog = catalogLoader.loadCatalog();
         icebergCatalog = cacheEnabled ? CachingCatalog.wrap(originalCatalog) : originalCatalog;
-        asNamespaceCatalog = originalCatalog instanceof SupportsNamespaces
-                ? (SupportsNamespaces) originalCatalog : null;
+        asNamespaceCatalog =
+                originalCatalog instanceof SupportsNamespaces ? (SupportsNamespaces) originalCatalog : null;
         closeable = originalCatalog instanceof Closeable ? (Closeable) originalCatalog : null;
+    }
+
+    private static void validateFlinkTable(CatalogBaseTable table) {
+        Preconditions.checkArgument(table instanceof CatalogTable, "The Table should be a CatalogTable.");
+
+        TableSchema schema = table.getSchema();
+        schema.getTableColumns().forEach(column -> {
+            if (!FlinkCompatibilityUtil.isPhysicalColumn(column)) {
+                throw new UnsupportedOperationException("Creating table with computed columns is not supported yet.");
+            }
+        });
+
+        if (!schema.getWatermarkSpecs().isEmpty()) {
+            throw new UnsupportedOperationException("Creating table with watermark specs is not supported yet.");
+        }
+    }
+
+    private static PartitionSpec toPartitionSpec(List<String> partitionKeys, Schema icebergSchema) {
+        PartitionSpec.Builder builder = PartitionSpec.builderFor(icebergSchema);
+        partitionKeys.forEach(builder::identity);
+        return builder.build();
+    }
+
+    private static List<String> toPartitionKeys(PartitionSpec spec, Schema icebergSchema) {
+        List<String> partitionKeys = Lists.newArrayList();
+        for (PartitionField field : spec.fields()) {
+            if (field.transform().isIdentity()) {
+                partitionKeys.add(icebergSchema.findColumnName(field.sourceId()));
+            } else {
+                // Not created by Flink SQL.
+                // For compatibility with iceberg tables, return empty.
+                // TODO modify this after Flink support partition transform.
+                return Collections.emptyList();
+            }
+        }
+        return partitionKeys;
+    }
+
+    private static void commitChanges(Table table, String setLocation, String setSnapshotId,
+            String pickSnapshotId, Map<String, String> setProperties) {
+        // don't allow setting the snapshot and picking a commit
+        // at the same time because order is ambiguous and choosing
+        // one order leads to different results
+        Preconditions.checkArgument(setSnapshotId == null || pickSnapshotId == null,
+                "Cannot set the current snapshot ID and cherry-pick snapshot changes");
+
+        if (setSnapshotId != null) {
+            long newSnapshotId = Long.parseLong(setSnapshotId);
+            table.manageSnapshots().setCurrentSnapshot(newSnapshotId).commit();
+        }
+
+        // if updating the table snapshot, perform that update first in case it fails
+        if (pickSnapshotId != null) {
+            long newSnapshotId = Long.parseLong(pickSnapshotId);
+            table.manageSnapshots().cherrypick(newSnapshotId).commit();
+        }
+
+        Transaction transaction = table.newTransaction();
+
+        if (setLocation != null) {
+            transaction.updateLocation()
+                    .setLocation(setLocation)
+                    .commit();
+        }
+
+        if (!setProperties.isEmpty()) {
+            UpdateProperties updateProperties = transaction.updateProperties();
+            setProperties.forEach((k, v) -> {
+                if (v == null) {
+                    updateProperties.remove(k);
+                } else {
+                    updateProperties.set(k, v);
+                }
+            });
+            updateProperties.commit();
+        }
+
+        transaction.commitTransaction();
+    }
+
+    static CatalogTable toCatalogTable(Table table) {
+        TableSchema schema = FlinkSchemaUtil.toSchema(table.schema());
+        List<String> partitionKeys = toPartitionKeys(table.spec(), table.schema());
+
+        // NOTE: We can not create a IcebergCatalogTable extends CatalogTable, because Flink optimizer may use
+        // CatalogTableImpl to copy a new catalog table.
+        // Let's re-loading table from Iceberg catalog when creating source/sink operators.
+        // Iceberg does not have Table comment, so pass a null (Default comment value in Flink).
+        return new CatalogTableImpl(schema, partitionKeys, table.properties(), null);
     }
 
     @Override
@@ -367,8 +457,9 @@ public class FlinkCatalog extends AbstractCatalog {
             throws CatalogException, TableAlreadyExistException {
         if (Objects.equals(table.getOptions().get("connector"), FlinkDynamicTableFactory.FACTORY_IDENTIFIER)) {
             throw new IllegalArgumentException("Cannot create the table with 'connector'='iceberg' table property in "
-                    + "an iceberg catalog, Please create table with 'connector'='iceberg' property in a non-iceberg "
-                    + "catalog or create table without 'connector'='iceberg' related properties in an iceberg table.");
+                    + "an iceberg catalog, Please create table with 'connector'='iceberg' "
+                    + "property in a non-iceberg catalog "
+                    + "or create table without 'connector'='iceberg' related properties in an iceberg table.");
         }
 
         createIcebergTable(tablePath, table, ignoreIfExists);
@@ -468,94 +559,6 @@ public class FlinkCatalog extends AbstractCatalog {
         });
 
         commitChanges(icebergTable, setLocation, setSnapshotId, pickSnapshotId, setProperties);
-    }
-
-    private static void validateFlinkTable(CatalogBaseTable table) {
-        Preconditions.checkArgument(table instanceof CatalogTable, "The Table should be a CatalogTable.");
-
-        TableSchema schema = table.getSchema();
-        schema.getTableColumns().forEach(column -> {
-            if (!FlinkCompatibilityUtil.isPhysicalColumn(column)) {
-                throw new UnsupportedOperationException("Creating table with computed columns is not supported yet.");
-            }
-        });
-
-        if (!schema.getWatermarkSpecs().isEmpty()) {
-            throw new UnsupportedOperationException("Creating table with watermark specs is not supported yet.");
-        }
-    }
-
-    private static PartitionSpec toPartitionSpec(List<String> partitionKeys, Schema icebergSchema) {
-        PartitionSpec.Builder builder = PartitionSpec.builderFor(icebergSchema);
-        partitionKeys.forEach(builder::identity);
-        return builder.build();
-    }
-
-    private static List<String> toPartitionKeys(PartitionSpec spec, Schema icebergSchema) {
-        List<String> partitionKeys = Lists.newArrayList();
-        for (PartitionField field : spec.fields()) {
-            if (field.transform().isIdentity()) {
-                partitionKeys.add(icebergSchema.findColumnName(field.sourceId()));
-            } else {
-                // Not created by Flink SQL.
-                // For compatibility with iceberg tables, return empty.
-                // TODO modify this after Flink support partition transform.
-                return Collections.emptyList();
-            }
-        }
-        return partitionKeys;
-    }
-
-    private static void commitChanges(Table table, String setLocation, String setSnapshotId,
-            String pickSnapshotId, Map<String, String> setProperties) {
-        // don't allow setting the snapshot and picking a commit at the same time because order is ambiguous and
-        // choosing one order leads to different results
-        Preconditions.checkArgument(setSnapshotId == null || pickSnapshotId == null,
-                "Cannot set the current snapshot ID and cherry-pick snapshot changes");
-
-        if (setSnapshotId != null) {
-            long newSnapshotId = Long.parseLong(setSnapshotId);
-            table.manageSnapshots().setCurrentSnapshot(newSnapshotId).commit();
-        }
-
-        // if updating the table snapshot, perform that update first in case it fails
-        if (pickSnapshotId != null) {
-            long newSnapshotId = Long.parseLong(pickSnapshotId);
-            table.manageSnapshots().cherrypick(newSnapshotId).commit();
-        }
-
-        Transaction transaction = table.newTransaction();
-
-        if (setLocation != null) {
-            transaction.updateLocation()
-                    .setLocation(setLocation)
-                    .commit();
-        }
-
-        if (!setProperties.isEmpty()) {
-            UpdateProperties updateProperties = transaction.updateProperties();
-            setProperties.forEach((k, v) -> {
-                if (v == null) {
-                    updateProperties.remove(k);
-                } else {
-                    updateProperties.set(k, v);
-                }
-            });
-            updateProperties.commit();
-        }
-
-        transaction.commitTransaction();
-    }
-
-    static CatalogTable toCatalogTable(Table table) {
-        TableSchema schema = FlinkSchemaUtil.toSchema(table.schema());
-        List<String> partitionKeys = toPartitionKeys(table.spec(), table.schema());
-
-        // NOTE: We can not create a IcebergCatalogTable extends CatalogTable, because Flink optimizer may use
-        // CatalogTableImpl to copy a new catalog table.
-        // Let's re-loading table from Iceberg catalog when creating source/sink operators.
-        // Iceberg does not have Table comment, so pass a null (Default comment value in Flink).
-        return new CatalogTableImpl(schema, partitionKeys, table.properties(), null);
     }
 
     @Override
@@ -722,10 +725,9 @@ public class FlinkCatalog extends AbstractCatalog {
     }
 
     @Override
-    public CatalogColumnStatistics getPartitionColumnStatistics(
-            ObjectPath tablePath, CatalogPartitionSpec partitionSpec)
+    public CatalogColumnStatistics getPartitionColumnStatistics(ObjectPath tablePath,
+            CatalogPartitionSpec partitionSpec)
             throws CatalogException {
         return CatalogColumnStatistics.UNKNOWN;
     }
 }
-
