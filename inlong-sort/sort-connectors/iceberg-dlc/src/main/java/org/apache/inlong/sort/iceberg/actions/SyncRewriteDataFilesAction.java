@@ -18,6 +18,7 @@
 
 package org.apache.inlong.sort.iceberg.actions;
 
+import org.apache.iceberg.Table;
 import org.apache.iceberg.actions.Action;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,10 +44,12 @@ public class SyncRewriteDataFilesAction implements
 
     private SyncRewriteDataFilesActionOption options;
     private AtomicInteger snapshotCounter;
+    private transient Table table;
 
-    public SyncRewriteDataFilesAction(SyncRewriteDataFilesActionOption option) {
+    public SyncRewriteDataFilesAction(SyncRewriteDataFilesActionOption option, Table table) {
         this.snapshotCounter = new AtomicInteger();
         this.options = option;
+        this.table = table;
     }
 
     @Override
@@ -73,12 +76,13 @@ public class SyncRewriteDataFilesAction implements
             return new RewriteResult("fail.");
         }
 
-        String rewriteTableSql = options.rewriteSql();
+        String rewriteTableSql = options.rewriteSql(table);
         try {
             Statement statement = connection.createStatement();
             LOG.info("Do compact: {}", rewriteTableSql);
             boolean firstIsResultSet = statement.execute(rewriteTableSql);
-            if (firstIsResultSet) {
+
+            if (false) {  // todo:可以配置当做同步还是异步，获取ResultSet是同步的，不获取就只是异步的
                 ResultSet rs = statement.getResultSet();
                 ResultSetMetaData rsmd = rs.getMetaData();
                 int columnsNumber = rsmd.getColumnCount();
