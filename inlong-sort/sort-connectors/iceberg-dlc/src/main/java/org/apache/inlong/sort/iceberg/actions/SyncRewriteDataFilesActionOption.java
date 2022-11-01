@@ -19,6 +19,7 @@
 package org.apache.inlong.sort.iceberg.actions;
 
 import com.qcloud.dlc.common.Constants;
+import org.apache.iceberg.Table;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
 import org.apache.iceberg.util.PropertyUtil;
 import org.apache.inlong.sort.iceberg.CompactTableProperties;
@@ -135,12 +136,13 @@ public class SyncRewriteDataFilesActionOption implements Serializable {
         return properties.get(AUTH_SECRET_KEY);
     }
 
-    public String rewriteSql() {
+    public String rewriteSql(Table table) {
         String dbName = properties.get(REWRITE_DB_NAME);
         String tableName = properties.get(REWRITE_TABLE_NAME);
         Preconditions.checkNotNull(dbName);
         Preconditions.checkNotNull(tableName);
         String wholeTableName = String.format("%s.%s", dbName, tableName);
+        properties.put(CompactTableProperties.COMPACT_END_SNAPSHOT_ID, String.valueOf(table.currentSnapshot().snapshotId()));  // todo:后续优化这段添加snapshop-id的逻辑
         String rewriteOptions = String.join(",",
                 CompactTableProperties.ACTION_AUTO_COMPACT_OPTIONS.stream()
                     .filter(properties::containsKey)

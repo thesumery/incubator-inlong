@@ -145,7 +145,7 @@ public class IcebergSingleFileCommiter extends IcebergProcessFunction<WriteResul
         // compact file
         if (PropertyUtil.propertyAsBoolean(table.properties(), CompactTableProperties.COMPACT_ENABLED,
                 CompactTableProperties.COMPACT_ENABLED_DEFAULT)) {
-            compactAction = new SyncRewriteDataFilesAction(compactOption);
+            compactAction = new SyncRewriteDataFilesAction(compactOption, table);
             CompactTableProperties.TABLE_AUTO_COMPACT_PROPERTIES.stream()
                     .forEach(k -> Optional.ofNullable(table.properties().get(k))
                                         .ifPresent(v -> compactAction.option(k, v)));

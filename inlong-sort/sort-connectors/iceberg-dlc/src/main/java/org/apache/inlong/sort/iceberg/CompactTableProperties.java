@@ -66,6 +66,8 @@ public class CompactTableProperties {
     public static final String COMPACT_MAX_FILE_SIZE_BYTES = "write.compact.max-file-size-bytes";
     public static final double COMPACT_MAX_FILE_SIZE_BYTES_DEFAULT = 1.80d * COMPACT_TARGET_FILE_SIZE_BYTES_DEFAULT;
 
+    public static final String COMPACT_END_SNAPSHOT_ID = "write.compact.snapshot-id";
+
     public static final Set<String> TABLE_AUTO_COMPACT_PROPERTIES = Stream.of(
                 COMPACT_ENABLED,
                 COMPACT_INTERVAL,
@@ -92,6 +94,7 @@ public class CompactTableProperties {
             COMPACT_MIN_INPUT_FILES,
             COMPACT_DELETE_FILE_THRESHOLD,
             COMPACT_MIN_FILE_SIZE_BYTES,
-            COMPACT_MAX_FILE_SIZE_BYTES
+            COMPACT_MAX_FILE_SIZE_BYTES,
+            COMPACT_END_SNAPSHOT_ID
     ).collect(Collectors.toSet());
 }
