@@ -171,8 +171,8 @@ public final class Constants {
                     .withDescription("Whether generated pk fields as whole data when source table does not have a "
                             + "primary key.");
 
-    public static final ConfigOption<Boolean> SINK_MULTIPLE_TYPE_MAP_SPARK_ENGINE_ENABLE =
-            ConfigOptions.key("sink.multiple.typemap.spark.engine.enable")
+    public static final ConfigOption<Boolean> SINK_MULTIPLE_TYPE_MAP_COMPATIBLE_WITH_SPARK =
+            ConfigOptions.key("sink.multiple.typemap-compatible-with-spark")
                     .booleanType()
                     .defaultValue(false)
                     .withDescription("Because spark do not support iceberg data type: `timestamp without time zone` and"
