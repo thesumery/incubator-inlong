@@ -15,27 +15,38 @@
  * limitations under the License.
  */
 
-package org.apache.inlong.dataproxy.http;
+package org.apache.inlong.agent.plugin.sources.snapshot;
 
-public interface StatusCode {
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-    /*
-     * success
-     */
-    int SUCCESS = 1;
+import java.io.File;
 
-    /*
-     * illegal argument
-     */
-    int ILLEGAL_ARGUMENT = -100;
+/**
+ * SqlServer Snapshot
+ */
+public class SqlServerSnapshotBase extends AbstractSnapshot {
 
-    /*
-     * exceed length
-     */
-    int EXCEED_LEN = -101;
+    private static final Logger LOGGER = LoggerFactory.getLogger(SqlServerSnapshotBase.class);
+    private final File file;
 
-    /*
-     * service error
-     */
-    int SERVICE_ERR = -105;
+    public SqlServerSnapshotBase(String filePath) {
+        file = new File(filePath);
+    }
+
+    @Override
+    public String getSnapshot() {
+        byte[] offset = this.load(this.file);
+        return ENCODER.encodeToString(offset);
+    }
+
+    @Override
+    public void close() {
+
+    }
+
+    public File getFile() {
+        return file;
+    }
+
 }
