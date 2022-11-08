@@ -94,7 +94,9 @@ public class DynamicSchemaHandleOperator extends AbstractStreamOperator<RecordWi
         this.catalog = catalogLoader.loadCatalog();
         this.asNamespaceCatalog =
                 catalog instanceof SupportsNamespaces ? (SupportsNamespaces) catalog : null;
-        this.dynamicSchemaFormat = DynamicSchemaFormatFactory.getFormat(multipleSinkOption.getFormat());
+        this.dynamicSchemaFormat = DynamicSchemaFormatFactory.getFormat(
+                multipleSinkOption.getFormat(), multipleSinkOption.getFormatOption());
+
         this.processingTimeService = getRuntimeContext().getProcessingTimeService();
         processingTimeService.registerTimer(
                 processingTimeService.getCurrentProcessingTime() + HELPER_DEBUG_INTERVEL, this);
@@ -229,10 +231,12 @@ public class DynamicSchemaHandleOperator extends AbstractStreamOperator<RecordWi
         Transaction transaction = table.newTransaction();
         if (table.schema().sameSchema(oldSchema)) {
             List<TableChange> tableChanges = SchemaChangeUtils.diffSchema(oldSchema, newSchema);
-            if (canHandleWithSchemaUpdatePolicy(tableId, tableChanges)) {
-                SchemaChangeUtils.applySchemaChanges(transaction.updateSchema(), tableChanges);
-                LOG.info("Schema evolution in table({}) for table change: {}", tableId, tableChanges);
+            if (!canHandleWithSchemaUpdatePolicy(tableId, tableChanges)) {
+                // If can not handle this schema update, should not push data into next operator
+                return;
             }
+            SchemaChangeUtils.applySchemaChanges(transaction.updateSchema(), tableChanges);
+            LOG.info("Schema evolution in table({}) for table change: {}", tableId, tableChanges);
         }
         transaction.commitTransaction();
         handleSchemaInfoEvent(tableId, table.schema());
@@ -270,22 +274,20 @@ public class DynamicSchemaHandleOperator extends AbstractStreamOperator<RecordWi
     private boolean canHandleWithSchemaUpdatePolicy(TableIdentifier tableId, List<TableChange> tableChanges) {
         boolean canHandle = true;
         for (TableChange tableChange : tableChanges) {
-            if (tableChange instanceof AddColumn) {
-                canHandle &= MultipleSinkOption.canHandleWithSchemaUpdate(tableId.toString(), tableChange,
-                        multipleSinkOption.getSchemaUpdatePolicy());
-            } else {
-                if (MultipleSinkOption.canHandleWithSchemaUpdate(tableId.toString(), tableChange,
-                        multipleSinkOption.getSchemaUpdatePolicy())) {
-                    LOG.info("Ignore table {} schema change: {} because iceberg can't handle it.",
-                            tableId, tableChange);
-                }
+            canHandle &= MultipleSinkOption.canHandleWithSchemaUpdate(tableId.toString(), tableChange,
+                    multipleSinkOption.getSchemaUpdatePolicy());
+            if (!(tableChange instanceof AddColumn)) {
                 // todo:currently iceberg can only handle addColumn, so always return false
+                LOG.info("Ignore table {} schema change: {} because iceberg can't handle it.",
+                        tableId, tableChange);
                 canHandle = false;
             }
+            if (!canHandle) {
+                blacklist.add(tableId);
+                break;
+            }
         }
-        if (!canHandle) {
-            blacklist.add(tableId);
-        }
+
         return canHandle;
     }
 }
